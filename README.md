@@ -91,3 +91,9 @@ claude mcp add mimir -- "$PWD\.venv\Scripts\python.exe" -m mimir.server "C:\path
 - Project memory: notes the agent keeps across sessions
 - More languages through tree-sitter
 - Benchmark: tokens and attempts to fix bugs with and without Mimir
+
+## License
+
+GPL-3.0-or-later. You may use, study and change Mimir, but anything you
+distribute that is built on it must also be released under the GPL with its
+source code. See [LICENSE](LICENSE).
