@@ -1,4 +1,4 @@
-"""End-to-end demo: talks to the aide MCP server over the real MCP protocol
+"""End-to-end demo: talks to the Mimir MCP server over the real MCP protocol
 and walks through fixing the bug in demo_shop, the way an AI agent would.
 
 Runs on a fresh copy of demo_shop, so it can be repeated.
@@ -21,9 +21,9 @@ def banner(step: str):
 
 
 async def main():
-    work = Path(tempfile.mkdtemp(prefix="aide-demo-")) / "demo_shop"
+    work = Path(tempfile.mkdtemp(prefix="mimir-demo-")) / "demo_shop"
     shutil.copytree(HERE / "demo_shop", work)
-    params = StdioServerParameters(command=sys.executable, args=["-m", "aide.server", str(work)], cwd=str(HERE))
+    params = StdioServerParameters(command=sys.executable, args=["-m", "mimir.server", str(work)], cwd=str(HERE))
 
     async with stdio_client(params) as (r, w), ClientSession(r, w) as s:
         await s.initialize()
@@ -79,7 +79,7 @@ async def main():
         sym = (await s.call_tool("get_symbol", {"name": "Cart.total"})).content[0].text
         print(f"read whole cart.py: {len(whole)} chars | outline: {len(outline)} | get_symbol('Cart.total'): {len(sym)}")
 
-    print(f"\nActivity log for the dashboard: {work / '.aide' / 'activity.jsonl'}")
+    print(f"\nActivity log for the dashboard: {work / '.mimir' / 'activity.jsonl'}")
 
 
 if __name__ == "__main__":

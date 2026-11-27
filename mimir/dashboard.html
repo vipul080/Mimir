@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mimir</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #e3e6eb; --text: #1b1f24; --muted: #66707c;
+    --accent: #3b5bdb; --ok: #1f8a4c; --ok-bg: #e5f5ec; --bad: #c92a2a; --bad-bg: #fdecec;
+    --warn: #b35c00; --warn-bg: #fff3e0; --human: #7048e8; --human-bg: #f1ecfe;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #171b21; --line: #262c35; --text: #e6e9ee; --muted: #8b95a3;
+      --accent: #7c9cff; --ok: #4cc38a; --ok-bg: #10291d; --bad: #ff6b6b; --bad-bg: #331717;
+      --warn: #ffa94d; --warn-bg: #33230f; --human: #b197fc; --human-bg: #231b3a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 24px;
+           border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  .logo { font: 700 18px var(--mono); letter-spacing: -0.5px; }
+  .logo span { color: var(--accent); }
+  .project { color: var(--muted); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .project b { color: var(--text); }
+  .pill { padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; white-space: nowrap; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .pill.none { background: var(--line); color: var(--muted); }
+  .live { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .dot.off { background: var(--bad); }
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  .stat .v { font: 600 24px var(--mono); }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  section + section { margin-top: 20px; }
+  h2 { margin: 0; padding: 12px 16px; font-size: 13px; text-transform: uppercase; letter-spacing: .5px;
+       color: var(--muted); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+  h2 .grow { flex: 1; }
+  button { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger:hover { border-color: var(--bad); color: var(--bad); }
+  button:disabled { opacity: .5; cursor: wait; }
+  #feed { max-height: calc(100vh - 260px); min-height: 300px; overflow-y: auto; }
+  .row { padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .row:hover { background: var(--bg); }
+  .row-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .time { color: var(--muted); font: 12px var(--mono); white-space: nowrap; }
+  .who { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: var(--line); color: var(--muted); }
+  .who.human { background: var(--human-bg); color: var(--human); }
+  .tool { font: 600 13px var(--mono); }
+  .args { color: var(--muted); font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .tag { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
+  .tag.ok { background: var(--ok-bg); color: var(--ok); }
+  .tag.bad { background: var(--bad-bg); color: var(--bad); }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); }
+  .ms { color: var(--muted); font: 11px var(--mono); }
+  .summary { margin-top: 3px; color: var(--muted); font: 12px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  pre { margin: 8px 0 0; padding: 10px; background: var(--bg); border-radius: 6px; font: 12px/1.5 var(--mono);
+        white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; }
+  .empty { padding: 30px 16px; text-align: center; color: var(--muted); }
+  .cp { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .cp:last-child { border-bottom: 0; }
+  .cp .name { font: 600 13px var(--mono); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cp .meta { color: var(--muted); font-size: 12px; }
+  .changes { padding: 12px 16px; font: 12px/1.7 var(--mono); }
+  .changes .m { color: var(--warn); } .changes .a { color: var(--ok); } .changes .d { color: var(--bad); }
+  dialog { width: min(900px, 94vw); border: 1px solid var(--line); border-radius: 12px; padding: 0;
+           background: var(--panel); color: var(--text); }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog h3 { margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 15px; display: flex; gap: 8px; }
+  dialog h3 span { flex: 1; }
+  dialog pre { margin: 0; border-radius: 0; max-height: 70vh; }
+  .diff-add { color: var(--ok); } .diff-del { color: var(--bad); } .diff-hunk { color: var(--accent); }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+           padding: 10px 16px; border-radius: 8px; font-size: 13px; max-width: 90vw; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  @media (max-width: 900px) {
+    header { padding: 12px 16px; } main { padding: 16px; }
+    .grid { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    #feed { max-height: 60vh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Mim<span>ir</span></div>
+  <div class="project" id="project">connecting…</div>
+  <div class="pill none" id="status">Tests not run</div>
+  <div class="live"><div class="dot" id="dot"></div><span id="live">live</span></div>
+</header>
+
+<main>
+  <div class="stats">
+    <div class="stat"><div class="v" id="s-calls">0</div><div class="k">AI tool calls</div></div>
+    <div class="stat"><div class="v" id="s-edits">0</div><div class="k">Edits & rollbacks</div></div>
+    <div class="stat"><div class="v" id="s-refused">0</div><div class="k">Refused / errors</div></div>
+    <div class="stat"><div class="v" id="s-files">0</div><div class="k">Python files</div></div>
+  </div>
+
+  <div class="grid">
+    <section>
+      <h2><span class="grow">Live activity</span><button class="primary" id="btn-check">Run checks</button></h2>
+      <div id="feed"><div class="empty">Waiting for the AI to do something…</div></div>
+    </section>
+
+    <div>
+      <section>
+        <h2><span class="grow">Changes</span></h2>
+        <div class="changes" id="changes">No checkpoint yet.</div>
+      </section>
+      <section>
+        <h2><span class="grow">Checkpoints</span><button id="btn-cp">Save checkpoint</button></h2>
+        <div id="cps"><div class="empty">No checkpoints yet.</div></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<dialog id="dlg">
+  <h3><span id="dlg-title"></span><button id="dlg-close">Close</button></h3>
+  <pre id="dlg-body"></pre>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let since = 0, busy = false;
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 3500);
+}
+
+async function post(path, body = {}) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Mimir": "1" },
+                                body: JSON.stringify(body) });
+  const data = await r.json();
+  if (data.error) throw new Error(data.error);
+  return data.result;
+}
+
+function argText(args) {
+  return Object.entries(args || {}).map(([k, v]) => {
+    let s = typeof v === "string" ? v : JSON.stringify(v);
+    if (s.length > 60) s = s.slice(0, 57) + "…";
+    return `${k}=${s}`;
+  }).join("  ");
+}
+
+function outcome(e) {
+  const h = e.result_head || "";
+  if (h.startsWith("ERROR")) return ["bad", h.includes("Rejected") ? "refused" : "error"];
+  const m = h.match(/RESULT: (ok|FAIL)/);
+  if (m) return m[1] === "ok" ? ["ok", "checks pass"] : ["bad", "checks fail"];
+  if (e.tool === "restore") return ["warn", "rolled back"];
+  if (e.tool === "checkpoint") return ["ok", "saved"];
+  return null;
+}
+
+function summaryLine(e) {
+  const lines = (e.result_head || "").split("\n").filter(l => l.trim());
+  const fail = lines.find(l => /^FAILED|SyntaxError|Rejected/.test(l));
+  return fail || lines[0] || "";
+}
+
+function renderEntry(e) {
+  const o = outcome(e);
+  const div = document.createElement("div");
+  div.className = "row";
+  div.innerHTML = `
+    <div class="row-top">
+      <span class="time">${esc(e.time.slice(11))}</span>
+      <span class="who ${e.by === "human" ? "human" : ""}">${e.by === "human" ? "YOU" : "AI"}</span>
+      <span class="tool">${esc(e.tool)}</span>
+      <span class="args">${esc(argText(e.args))}</span>
+      ${o ? `<span class="tag ${o[0]}">${o[1]}</span>` : ""}
+      <span class="ms">${e.ms}ms</span>
+    </div>
+    <div class="summary">${esc(summaryLine(e))}</div>`;
+  div.addEventListener("click", () => {
+    const open = div.querySelector("pre");
+    if (open) { open.remove(); return; }
+    const pre = document.createElement("pre");
+    pre.textContent = e.result_head + (e.result_chars > e.result_head.length ? `\n… (${e.result_chars} chars total)` : "");
+    div.appendChild(pre);
+  });
+  return div;
+}
+
+function renderStatus(c) {
+  const s = $("status");
+  if (!c) { s.className = "pill none"; s.textContent = "Tests not run"; return; }
+  s.className = "pill " + (c.ok ? "ok" : "bad");
+  s.textContent = (c.ok ? "✓ Checks passing" : "✗ Checks failing") + ` · ${c.time.slice(11)}`;
+}
+
+function renderChanges(ch, cpId) {
+  const el = $("changes");
+  if (!ch) { el.textContent = "No checkpoint yet. Changes are tracked from the latest checkpoint."; return; }
+  const parts = [`<div style="color:var(--muted)">since ${esc(cpId)}</div>`];
+  for (const [k, cls, sym] of [["modified","m","~"],["added","a","+"],["deleted","d","−"]])
+    for (const f of ch[k]) parts.push(`<div class="${cls}">${sym} ${esc(f)}</div>`);
+  if (parts.length === 1) parts.push("<div>No changes.</div>");
+  el.innerHTML = parts.join("");
+}
+
+function renderCheckpoints(cps) {
+  const el = $("cps");
+  if (!cps.length) { el.innerHTML = `<div class="empty">No checkpoints yet.</div>`; return; }
+  el.innerHTML = cps.slice().reverse().map(c => `
+    <div class="cp">
+      <div style="flex:1;min-width:0">
+        <div class="name" title="${esc(c.id)}">${esc(c.id)}</div>
+        <div class="meta">${esc(c.time)} · ${c.files} files</div>
+      </div>
+      <button data-diff="${esc(c.id)}">Diff</button>
+      <button class="danger" data-restore="${esc(c.id)}">Restore</button>
+    </div>`).join("");
+}
+
+async function refresh() {
+  try {
+    const r = await fetch(`/api/state?since=${since}`);
+    const s = await r.json();
+    $("dot").className = "dot"; $("live").textContent = "live";
+    $("project").innerHTML = `<b>${esc(s.project)}</b> &nbsp;${esc(s.path)}`;
+    $("s-calls").textContent = s.stats.calls;
+    $("s-edits").textContent = s.stats.edits;
+    $("s-refused").textContent = s.stats.refused;
+    $("s-files").textContent = s.stats.files;
+    renderStatus(s.last_check);
+    renderChanges(s.changes, s.changes_since);
+    renderCheckpoints(s.checkpoints);
+    if (s.entries.length) {
+      const feed = $("feed");
+      if (since === 0) feed.innerHTML = "";
+      for (const e of s.entries) feed.prepend(renderEntry(e));
+      since = s.total;
+    }
+  } catch {
+    $("dot").className = "dot off"; $("live").textContent = "disconnected";
+  }
+}
+
+$("btn-check").addEventListener("click", async (ev) => {
+  ev.target.disabled = true; ev.target.textContent = "Running…";
+  try { const r = await post("/api/check"); toast(r.split("\n")[0]); }
+  catch (e) { toast("Error: " + e.message); }
+  ev.target.disabled = false; ev.target.textContent = "Run checks";
+  refresh();
+});
+
+$("btn-cp").addEventListener("click", async () => {
+  const label = prompt("Name for this checkpoint:", "manual");
+  if (label === null) return;
+  try { toast(await post("/api/checkpoint", { label })); } catch (e) { toast("Error: " + e.message); }
+  refresh();
+});
+
+$("cps").addEventListener("click", async (ev) => {
+  const d = ev.target.dataset;
+  if (d.diff) {
+    const r = await (await fetch(`/api/diff?id=${encodeURIComponent(d.diff)}`)).json();
+    $("dlg-title").textContent = `Changes since ${d.diff}`;
+    $("dlg-body").innerHTML = esc(r.diff || r.error).split("\n").map(l =>
+      l.startsWith("+++") || l.startsWith("---") ? `<b>${l}</b>` :
+      l.startsWith("+") ? `<span class="diff-add">${l}</span>` :
+      l.startsWith("-") ? `<span class="diff-del">${l}</span>` :
+      l.startsWith("@@") ? `<span class="diff-hunk">${l}</span>` : l).join("\n");
+    $("dlg").showModal();
+  }
+  if (d.restore) {
+    if (!confirm(`Roll the project back to ${d.restore}?\n\nFiles added since then will be removed. A safety checkpoint is saved first, so you can undo this.`)) return;
+    try { toast(await post("/api/restore", { id: d.restore })); } catch (e) { toast("Error: " + e.message); }
+    refresh();
+  }
+});
+
+$("dlg-close").addEventListener("click", () => $("dlg").close());
+refresh();
+setInterval(refresh, 1500);
+</script>
+</body>
+</html>

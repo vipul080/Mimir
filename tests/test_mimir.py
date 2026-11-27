@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from aide.checkpoints import Checkpoints
-from aide.codemap import CodeMap
-from aide.edits import EditError, replace_symbol
-from aide.feedback import check
+from mimir.checkpoints import Checkpoints
+from mimir.codemap import CodeMap
+from mimir.edits import EditError, replace_symbol
+from mimir.feedback import check
 
 DEMO = Path(__file__).parent.parent / "demo_shop"
 

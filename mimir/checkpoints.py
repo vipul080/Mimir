@@ -1,5 +1,5 @@
 """Checkpoints: save the whole project before a risky change, compare against
-it, and roll back in one call. Stored under <project>/.aide/checkpoints/."""
+it, and roll back in one call. Stored under <project>/.mimir/checkpoints/."""
 from __future__ import annotations
 
 import difflib
@@ -20,7 +20,7 @@ MAX_DIFF_CHARS = 6000
 class Checkpoints:
     def __init__(self, root: str | Path):
         self.root = Path(root).resolve()
-        self.store = self.root / ".aide" / "checkpoints"
+        self.store = self.root / ".mimir" / "checkpoints"
 
     def _project_files(self) -> list[str]:
         out = []

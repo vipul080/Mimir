@@ -1,12 +1,11 @@
-"""aide: an IDE whose only user is an AI. Exposed as an MCP server.
+"""Mimir: an IDE whose only user is an AI. Exposed as an MCP server.
 
-Run:  python -m aide.server <project-folder>
-(or set AIDE_ROOT). Defaults to the current folder.
+Run:  python -m mimir.server <project-folder>
+(or set MIMIR_ROOT). Defaults to the current folder.
 """
 from __future__ import annotations
 
 import functools
-import json
 import os
 import sys
 import time
@@ -14,16 +13,17 @@ from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 
+from . import activity
 from .checkpoints import Checkpoints
 from .codemap import CodeMap
 from .edits import EditError, replace_symbol as _replace_symbol
 from .feedback import check as _check
 
-ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else os.environ.get("AIDE_ROOT", ".")).resolve()
+ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else os.environ.get("MIMIR_ROOT", ".")).resolve()
 cm = CodeMap(ROOT)
 cps = Checkpoints(ROOT)
 
-INSTRUCTIONS = f"""aide gives you a structural view of the Python project at {ROOT}.
+INSTRUCTIONS = f"""Mimir gives you a structural view of the Python project at {ROOT}.
 Prefer these tools over reading whole files or grepping:
 1. repo_map() first to see the project's shape.
 2. outline(file) to see a file's signatures without bodies.
@@ -34,20 +34,7 @@ Prefer these tools over reading whole files or grepping:
    edits that break syntax and returns lint + related test results.
 7. check() after any other edit for syntax, lint and test results."""
 
-mcp = MCPServer("aide", instructions=INSTRUCTIONS)
-
-
-def _log(tool: str, args: dict, result: str, ms: int):
-    """Activity log for the human dashboard (one JSON object per line)."""
-    try:
-        log = ROOT / ".aide" / "activity.jsonl"
-        log.parent.mkdir(parents=True, exist_ok=True)
-        entry = {"time": time.strftime("%Y-%m-%d %H:%M:%S"), "tool": tool, "args": args,
-                 "ms": ms, "result_chars": len(result), "result_head": result[:300]}
-        with log.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(entry) + "\n")
-    except OSError:
-        pass
+mcp = MCPServer("mimir", instructions=INSTRUCTIONS)
 
 
 def logged(fn):
@@ -58,7 +45,7 @@ def logged(fn):
             result = fn(*args, **kwargs)
         except (EditError, ValueError, FileNotFoundError) as e:
             result = f"ERROR: {e}"
-        _log(fn.__name__, kwargs, result, int((time.perf_counter() - t) * 1000))
+        activity.write(ROOT, fn.__name__, kwargs, result, int((time.perf_counter() - t) * 1000))
         return result
     return wrapper
 

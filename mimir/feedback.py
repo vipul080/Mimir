@@ -16,9 +16,9 @@ MAX_TEST_OUTPUT = 3000  # characters of pytest failure detail to return
 
 
 def project_python(root: Path) -> str:
-    """The interpreter that should run the project's tests: AIDE_PYTHON if set,
-    else the project's own .venv, else the one running aide."""
-    env = os.environ.get("AIDE_PYTHON")
+    """The interpreter that should run the project's tests: MIMIR_PYTHON if set,
+    else the project's own .venv, else the one running Mimir."""
+    env = os.environ.get("MIMIR_PYTHON")
     if env:
         return env
     for cand in (root / ".venv" / "Scripts" / "python.exe", root / ".venv" / "bin" / "python",

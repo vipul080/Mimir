@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 SKIP_DIRS = {
-    ".git", ".venv", "venv", "env", "__pycache__", ".aide", "node_modules",
+    ".git", ".venv", "venv", "env", "__pycache__", ".mimir", "node_modules",
     "site-packages", ".pytest_cache", ".mypy_cache", "build", "dist", ".tox",
 }
 

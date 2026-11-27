@@ -1,5 +1,5 @@
 [project]
-name = "aide"
+name = "mimir"
 version = "0.1.0"
 description = "An IDE whose only user is an AI agent, served over MCP"
 requires-python = ">=3.10"
@@ -10,10 +10,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["aide"]
+packages = ["mimir"]
 
 [project.scripts]
-aide = "aide.server:main"
+mimir = "mimir.server:main"
+mimir-dashboard = "mimir.dashboard:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]   # demo_shop's tests fail on purpose
+
+[tool.setuptools.package-data]
+mimir = ["*.html"]
