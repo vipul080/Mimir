@@ -73,3 +73,18 @@ def test_checkpoint_restore_roundtrip(proj):
     # the restore itself can be undone
     cps.restore(r["safety_checkpoint"])
     assert (proj / "shop/new.py").exists()
+
+
+def test_restored_files_get_a_fresh_timestamp(proj):
+    """Otherwise Maven/Gradle keep the compiled output of the rolled-back code."""
+    import os
+    import time
+    cps = Checkpoints(proj)
+    target = proj / "shop/pricing.py"
+    old = time.time() - 3600
+    os.utime(target, (old, old))
+    cp = cps.create("start")
+    target.write_text("x = 1\n")
+    before = time.time() - 1
+    cps.restore(cp)
+    assert target.stat().st_mtime >= before

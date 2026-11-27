@@ -15,6 +15,23 @@ for _b in BACKENDS:
     SKIP_DIRS |= _b.skip_dirs
 
 
+def _compact_imports(imports: list[str]) -> str:
+    """Group imports that share a package: a.b.{C, D} instead of a.b.C, a.b.D."""
+    groups: dict[str, list[str]] = {}
+    for imp in dict.fromkeys(imports):
+        pkg, _, name = imp.rpartition(".")
+        groups.setdefault(pkg, []).append(name or imp)
+    parts = []
+    for pkg, names in groups.items():
+        if not pkg:
+            parts.extend(names)
+        elif len(names) == 1:
+            parts.append(f"{pkg}.{names[0]}")
+        else:
+            parts.append(f"{pkg}.{{{', '.join(names)}}}")
+    return ", ".join(parts)
+
+
 @dataclass
 class FileInfo:
     mtime: float
@@ -133,7 +150,7 @@ class CodeMap:
         if info.error:
             out.append(f"!! {info.error}")
         if info.imports:
-            out.append("imports: " + ", ".join(dict.fromkeys(info.imports)))
+            out.append("imports: " + _compact_imports(info.imports))
         for s in info.symbols:
             line = f"{'  ' * s.qualname.count('.')}L{s.start}-{s.end}  {s.signature}"
             if s.doc:

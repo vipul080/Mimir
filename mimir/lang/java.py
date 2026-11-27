@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import time
 from pathlib import Path
 
 import tree_sitter_java
@@ -36,11 +37,17 @@ def _javadoc(node: Node) -> str:
     raw = _text(prev)
     if not raw.startswith("/**"):
         return ""
+    words = []
     for line in raw[3:-2].splitlines():
         line = line.strip().lstrip("*").strip()
-        if line and not line.startswith("@"):
-            return line
-    return ""
+        if line.startswith("@") or (not line and words):
+            break
+        words.append(line)
+        if re.search(r"\.$|\.\s+[A-Z]", line):
+            break
+    text = " ".join(w for w in words if w)
+    text = re.split(r"(?<=\.)\s+(?=[A-Z])", text, maxsplit=1)[0]  # first sentence; "e.g. x" is not an end
+    return text if len(text) <= 160 else text[:157] + "..."
 
 
 def _signature(node: Node, src: bytes) -> str:
@@ -120,7 +127,49 @@ def _build_tool(root: Path) -> tuple[str, list[str]] | None:
 
 _MAVEN_NOISE = re.compile(
     r"^\s*$|-> \[Help|\[Help \d|Re-run Maven|To see the full|For more information|Failed to execute goal"
-    r"|^See |See dump files|<<< (FAILURE|ERROR)!|^Failures:\s*$|^Errors:\s*$|^COMPILATION ERROR")
+    r"|^See |See dump files|^Please refer to|<<< (FAILURE|ERROR)!|^Failures:\s*$|^Errors:\s*$|^COMPILATION ERROR")
+_FRAMEWORK_FRAME = re.compile(r"^\s*at (java\.|jdk\.|sun\.|org\.junit|org\.opentest4j|org\.mockito|"
+                              r"org\.assertj|org\.apache\.maven|org\.gradle|worker\.org\.gradle)")
+
+
+def _junit_failures(report_dirs: list[Path], since: float) -> list[str]:
+    """Read JUnit XML reports (written by both Maven Surefire and Gradle)
+    produced by this run, and describe each failing test in a few lines:
+    the assertion message plus the first stack frame in the project's code."""
+    import xml.etree.ElementTree as ET  # local files written by the build tool
+
+    out = []
+    for d in report_dirs:
+        for xml_file in sorted(d.glob("TEST-*.xml")) if d.is_dir() else []:
+            if xml_file.stat().st_mtime < since:
+                continue
+            try:
+                suite = ET.parse(xml_file).getroot()
+            except ET.ParseError:
+                continue
+            for case in suite.iter("testcase"):
+                problem = case.find("failure")
+                if problem is None:
+                    problem = case.find("error")
+                if problem is None:
+                    continue
+                cls = case.get("classname", "").rsplit(".", 1)[-1]
+                text = problem.text or ""
+                message = (problem.get("message") or "").strip() or text.strip().split("\n")[0]
+                # Mockito prints call arguments one per line; fold them back into one line
+                message = re.sub(r"\(\s*\n\s*", "(", message)
+                message = re.sub(r",\s*\n\s+", ", ", message)
+                message = re.sub(r"\s*\n\s*\)", ")", message)
+                lines = [ln.rstrip()[:220] for ln in message.splitlines() if ln.strip()][:10]
+                if "-> at " not in message:  # plain assertions: point at the first project frame
+                    frame = next((ln.strip() for ln in text.splitlines()
+                                  if ln.strip().startswith("at ") and not _FRAMEWORK_FRAME.match(ln)), "")
+                    if frame:
+                        lines.append(frame)
+                kind = problem.get("type", "").rsplit(".", 1)[-1]
+                head = f"{cls}.{case.get('name')}" + (f"  [{kind}]" if kind and kind not in message else "")
+                out.append(head + "\n" + "\n".join("    " + ln for ln in lines))
+    return out
 
 
 def _summarise_maven(out: str) -> str:
@@ -205,6 +254,7 @@ class JavaBackend:
             return results
         classes = sorted({Path(t).stem for t in tests})
         scope = f"{len(classes)} related test class(es)" if classes else "full suite"
+        started = time.time() - 1
         if kind == "maven":
             cmd = cmd + ["-B", "test"]
             if classes:
@@ -218,6 +268,14 @@ class JavaBackend:
                 cmd += ["--tests", c]
             code, out = run(cmd, cm.root, timeout=TEST_TIMEOUT)
             detail = _summarise_gradle(out) if code >= 0 else out
+        if code > 0:
+            # test failures: the XML reports explain them far better than the console log
+            failures = _junit_failures([cm.root / "target" / "surefire-reports",
+                                        cm.root / "build" / "test-results" / "test"], started)
+            if failures:
+                total = next((ln.replace("[ERROR] ", "").replace("[WARNING] ", "").strip()
+                              for ln in reversed(out.splitlines()) if "Tests run:" in ln and "Time elapsed" not in ln), "")
+                detail = truncate("\n".join(failures + ([total] if total else [])))
         for prefix in ("/" + cm.root.as_posix(), cm.root.as_posix(), str(cm.root)):
             detail = detail.replace(prefix + "/", "").replace(prefix + "\\", "")
         results.append(CheckResult(f"TESTS ({kind}, {scope})", code == 0, detail))

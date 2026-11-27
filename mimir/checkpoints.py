@@ -102,7 +102,10 @@ class Checkpoints:
         src = self._dir(cp_id) / "files"
         for rel in ch["modified"] + ch["deleted"]:
             (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src / rel, self.root / rel)
+            shutil.copyfile(src / rel, self.root / rel)
+            # a fresh timestamp, so build tools (Maven, Gradle, make) see the file as
+            # changed and recompile it instead of keeping the newer, rolled-back build
+            os.utime(self.root / rel, None)
         for rel in ch["added"]:
             (self.root / rel).unlink()
         return {"restored_from": cp_id, "safety_checkpoint": safety, **ch}
