@@ -106,7 +106,7 @@
     <div class="stat"><div class="v" id="s-calls">0</div><div class="k">AI tool calls</div></div>
     <div class="stat"><div class="v" id="s-edits">0</div><div class="k">Edits & rollbacks</div></div>
     <div class="stat"><div class="v" id="s-refused">0</div><div class="k">Refused / errors</div></div>
-    <div class="stat"><div class="v" id="s-files">0</div><div class="k">Python files</div></div>
+    <div class="stat"><div class="v" id="s-files">0</div><div class="k">Source files</div></div>
   </div>
 
   <div class="grid">
@@ -236,7 +236,7 @@ async function refresh() {
     const r = await fetch(`/api/state?since=${since}`);
     const s = await r.json();
     $("dot").className = "dot"; $("live").textContent = "live";
-    $("project").innerHTML = `<b>${esc(s.project)}</b> &nbsp;${esc(s.path)}`;
+    $("project").innerHTML = `<b>${esc(s.project)}</b> &nbsp;${esc((s.languages || []).join(", "))} &nbsp;·&nbsp; ${esc(s.path)}`;
     $("s-calls").textContent = s.stats.calls;
     $("s-edits").textContent = s.stats.edits;
     $("s-refused").textContent = s.stats.refused;

@@ -3,24 +3,20 @@ project and step in (run checks, view diffs, roll back to a checkpoint).
 
 Uses only Python's standard library, so it adds no dependencies and little RAM.
 
-Run:  python -m mimir.dashboard <project-folder> [--port 8765]
+Run:  mimir dashboard <project-folder> [--port 8765]
 Then open http://127.0.0.1:8765
 """
 from __future__ import annotations
 
-import argparse
 import json
 import re
-import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import activity
-from .checkpoints import Checkpoints
-from .codemap import CodeMap
-from .feedback import check
+from .api import Mimir
 
 PAGE = Path(__file__).with_name("dashboard.html")
 EDIT_TOOLS = {"replace_symbol", "restore"}
@@ -36,10 +32,11 @@ def last_check(entries: list[dict]) -> dict | None:
 
 
 class App:
+    """Dashboard actions go through the same API as the AI, logged as 'human'."""
+
     def __init__(self, root: Path):
-        self.root = root
-        self.cm = CodeMap(root)
-        self.cps = Checkpoints(root)
+        self.m = Mimir(root, actor="human")
+        self.root, self.cm, self.cps = self.m.root, self.m.cm, self.m.cps
 
     def state(self, since: int) -> dict:
         everything = activity.read(self.root)
@@ -48,6 +45,7 @@ class App:
         return {
             "project": self.root.name,
             "path": str(self.root),
+            "languages": [b.name for b in self.cm.languages()],
             "entries": [e for e in everything if e["n"] >= since][-500:],
             "total": len(everything),
             "stats": {
@@ -55,7 +53,7 @@ class App:
                 "edits": sum(1 for e in everything if e["tool"] in EDIT_TOOLS
                              and not e.get("result_head", "").startswith("ERROR")),
                 "refused": sum(1 for e in everything if e.get("result_head", "").startswith("ERROR")),
-                "files": len(self.cm.python_files()),
+                "files": len(self.cm.source_files()),
             },
             "last_check": last_check(everything),
             "checkpoints": cps,
@@ -64,24 +62,13 @@ class App:
         }
 
     def run_check(self) -> str:
-        t = time.perf_counter()
-        result = check(self.cm)
-        activity.write(self.root, "check", {}, result, int((time.perf_counter() - t) * 1000), by="human")
-        return result
+        return self.m.check()
 
     def restore(self, cp_id: str) -> str:
-        r = self.cps.restore(cp_id)
-        msg = (f"Already identical to {cp_id}." if r["safety_checkpoint"] is None else
-               f"Restored to {cp_id} (undo: {r['safety_checkpoint']}). "
-               f"modified {r['modified']}, re-created {r['deleted']}, removed {r['added']}")
-        activity.write(self.root, "restore", {"checkpoint_id": cp_id}, msg, 0, by="human")
-        return msg
+        return self.m.restore(cp_id)
 
     def checkpoint(self, label: str) -> str:
-        cp_id = self.cps.create(label)
-        msg = f"Checkpoint {cp_id} saved."
-        activity.write(self.root, "checkpoint", {"label": label}, msg, 0, by="human")
-        return msg
+        return self.m.checkpoint(label)
 
 
 def make_handler(app: App, port: int):
@@ -142,23 +129,24 @@ def make_handler(app: App, port: int):
     return Handler
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Mimir dashboard")
-    ap.add_argument("project", nargs="?", default=".")
-    ap.add_argument("--port", type=int, default=8765)
-    ap.add_argument("--no-browser", action="store_true")
-    args = ap.parse_args()
-
-    app = App(Path(args.project).resolve())
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(app, args.port))
-    url = f"http://127.0.0.1:{args.port}"
-    print(f"Mimir dashboard for {app.root}\n  {url}   (Ctrl+C to stop)")
-    if not args.no_browser:
+def run_dashboard(project: str, port: int = 8765, open_browser: bool = True) -> None:
+    app = App(Path(project).resolve())
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, port))
+    url = f"http://127.0.0.1:{port}"
+    print(f"Mimir dashboard for {app.root}")
+    print(f"  {url}   (Ctrl+C to stop)")
+    if open_browser:
         webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
+
+
+def main():
+    from .cli import main as cli_main
+    import sys
+    cli_main(["dashboard", *sys.argv[1:]])
 
 
 if __name__ == "__main__":
