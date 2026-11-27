@@ -106,23 +106,54 @@ class _Walker:
         self.out.calls.append(Call(".".join(stack) or "<module>", name, self.rel, line, text))
 
 
+def _version_key(path: Path) -> tuple:
+    """Sort key from the version in a path like .../apache-maven-3.10.0/... (3.10 > 3.9)."""
+    m = re.search(r"(?:maven|gradle)-(\d+(?:\.\d+)*)", path.as_posix())
+    return tuple(int(n) for n in m.group(1).split(".")) if m else ()
+
+
+def _cached_install(kind: str, home: Path | None = None) -> str | None:
+    """Newest Maven/Gradle that a project's wrapper (mvnw/gradlew) already
+    downloaded under the user's home folder, if any."""
+    home = home or Path.home()
+    exe = {"maven": "mvn", "gradle": "gradle"}[kind] + (
+        {"maven": ".cmd", "gradle": ".bat"}[kind] if os.name == "nt" else "")
+    if kind == "maven":
+        found = (home / ".m2" / "wrapper" / "dists").glob(f"apache-maven-*/*/bin/{exe}")
+    else:
+        found = (home / ".gradle" / "wrapper" / "dists").glob(f"gradle-*/*/gradle-*/bin/{exe}")
+    found = sorted(found, key=_version_key)
+    return str(found[-1]) if found else None
+
+
+def _from_home_env(kind: str) -> str | None:
+    """Maven/Gradle from the standard MAVEN_HOME / M2_HOME / GRADLE_HOME variables."""
+    win = os.name == "nt"
+    names = ("MAVEN_HOME", "M2_HOME") if kind == "maven" else ("GRADLE_HOME",)
+    exe = {"maven": "mvn.cmd" if win else "mvn", "gradle": "gradle.bat" if win else "gradle"}[kind]
+    for var in names:
+        if os.environ.get(var) and (p := Path(os.environ[var]) / "bin" / exe).exists():
+            return str(p)
+    return None
+
+
 def _build_tool(root: Path) -> tuple[str, list[str]] | None:
-    """('maven'|'gradle', base command) for the project, preferring its own wrapper."""
+    """('maven'|'gradle', base command) for the project. Order of preference:
+    MIMIR_MAVEN, the project's own wrapper, the tool on PATH, MAVEN_HOME/GRADLE_HOME,
+    and finally a copy another project's wrapper already downloaded."""
     win = os.name == "nt"
     if (root / "pom.xml").exists():
-        env = os.environ.get("MIMIR_MAVEN")
-        for cand in ([env] if env else []) + [str(root / ("mvnw.cmd" if win else "mvnw"))]:
-            if cand and Path(cand).exists():
-                return "maven", [cand]
-        found = shutil.which("mvn")
-        return ("maven", [found]) if found else None
-    if (root / "build.gradle").exists() or (root / "build.gradle.kts").exists():
-        wrapper = root / ("gradlew.bat" if win else "gradlew")
-        if wrapper.exists():
-            return "gradle", [str(wrapper)]
-        found = shutil.which("gradle")
-        return ("gradle", [found]) if found else None
-    return None
+        kind, env, wrapper, cmd = "maven", os.environ.get("MIMIR_MAVEN"), "mvnw", "mvn"
+    elif (root / "build.gradle").exists() or (root / "build.gradle.kts").exists():
+        kind, env, wrapper, cmd = "gradle", None, "gradlew", "gradle"
+    else:
+        return None
+    candidates = [env, str(root / (wrapper + (".cmd" if kind == "maven" else ".bat") if win else wrapper))]
+    for cand in candidates:
+        if cand and Path(cand).exists():
+            return kind, [cand]
+    found = shutil.which(cmd) or _from_home_env(kind) or _cached_install(kind)
+    return (kind, [found]) if found else None
 
 
 _MAVEN_NOISE = re.compile(
@@ -243,8 +274,9 @@ class JavaBackend:
         tool = _build_tool(cm.root)
         if tool is None:
             results.append(CheckResult("TESTS (java)", True,
-                                       "skipped: no pom.xml/build.gradle with Maven or Gradle available "
-                                       "(set MIMIR_MAVEN to a mvn executable)"))
+                                       "skipped: no pom.xml/build.gradle, or no Maven/Gradle found (checked the "
+                                       "project wrapper, PATH, MAVEN_HOME/GRADLE_HOME and wrapper downloads in "
+                                       "~/.m2 and ~/.gradle; set MIMIR_MAVEN to a mvn executable)"))
             return results
         kind, cmd = tool
         tests = self.related_tests(cm, targets) if files is not None else []

@@ -33,7 +33,17 @@ Names can be `func`, `Class.method` or `path/File.java:Class.method`. Add
 |---|---|---|
 | Parsing | built-in `ast` | tree-sitter |
 | Lint | pyflakes | compile errors, reported by the build |
-| Tests | pytest | Maven (`mvnw` / `mvn`) or Gradle (`gradlew` / `gradle`) |
+| Tests | pytest | Maven or Gradle, found automatically (see below) |
+
+For Java tests, Mimir looks for Maven or Gradle in this order:
+
+1. `MIMIR_MAVEN`, if set
+2. the project's own wrapper (`mvnw` / `gradlew`)
+3. `mvn` / `gradle` on `PATH`
+4. `MAVEN_HOME`, `M2_HOME` or `GRADLE_HOME`
+5. the newest copy another project's wrapper already downloaded to `~/.m2/wrapper` or `~/.gradle/wrapper`
+
+So a project without a wrapper still works if any other project on the machine has one.
 
 ## Safe to use with any AI
 
@@ -173,7 +183,7 @@ rejects requests from other websites. Every action is logged to
 |---|---|
 | `MIMIR_ROOT` | Default project folder for CLI commands |
 | `MIMIR_PYTHON` | Python interpreter for running the project's pytest tests |
-| `MIMIR_MAVEN` | Path to `mvn` when the project has no `mvnw` and Maven is not on `PATH` |
+| `MIMIR_MAVEN` | Path to a specific `mvn` to use, overriding automatic discovery |
 | `MIMIR_TOKEN` | Bearer token required by the HTTP server |
 
 ## Demos

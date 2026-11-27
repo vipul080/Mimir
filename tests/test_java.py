@@ -129,6 +129,49 @@ def test_javadoc_first_sentence_is_complete(tmp_path):
     assert "Second sentence" not in out
 
 
+def _fake_exe(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("")
+    return path
+
+
+def test_finds_newest_maven_downloaded_by_a_wrapper(tmp_path):
+    from mimir.lang import java
+    ext = ".cmd" if os.name == "nt" else ""
+    dists = tmp_path / ".m2" / "wrapper" / "dists"
+    for v in ("3.2.5", "3.9.16", "3.10.0"):
+        _fake_exe(dists / f"apache-maven-{v}" / "abc123" / "bin" / f"mvn{ext}")
+    assert "apache-maven-3.10.0" in java._cached_install("maven", home=tmp_path)  # 3.10 > 3.9
+    assert java._cached_install("gradle", home=tmp_path) is None
+
+
+def test_finds_gradle_downloaded_by_a_wrapper(tmp_path):
+    from mimir.lang import java
+    ext = ".bat" if os.name == "nt" else ""
+    dists = tmp_path / ".gradle" / "wrapper" / "dists"
+    for v in ("8.5", "8.14"):
+        _fake_exe(dists / f"gradle-{v}-bin" / "h" / f"gradle-{v}" / "bin" / f"gradle{ext}")
+    assert "gradle-8.14" in java._cached_install("gradle", home=tmp_path)
+
+
+def test_build_tool_preference_order(tmp_path, monkeypatch):
+    from mimir.lang import java
+    monkeypatch.delenv("MIMIR_MAVEN", raising=False)
+    monkeypatch.delenv("MAVEN_HOME", raising=False)
+    monkeypatch.delenv("M2_HOME", raising=False)
+    monkeypatch.setattr(java.shutil, "which", lambda name: None)
+    monkeypatch.setattr(java, "_cached_install", lambda kind: "/cache/mvn")
+    (tmp_path / "pom.xml").write_text("<project/>")
+    assert java._build_tool(tmp_path) == ("maven", ["/cache/mvn"])           # last resort
+    monkeypatch.setattr(java.shutil, "which", lambda name: "/path/mvn")
+    assert java._build_tool(tmp_path) == ("maven", ["/path/mvn"])            # PATH beats cache
+    wrapper = _fake_exe(tmp_path / ("mvnw.cmd" if os.name == "nt" else "mvnw"))
+    assert java._build_tool(tmp_path) == ("maven", [str(wrapper)])           # project wrapper beats PATH
+    override = _fake_exe(tmp_path / "custom" / "mvn")
+    monkeypatch.setenv("MIMIR_MAVEN", str(override))
+    assert java._build_tool(tmp_path) == ("maven", [str(override)])          # explicit setting wins
+
+
 def test_no_build_tool_is_reported_not_crashed(tmp_path, monkeypatch):
     monkeypatch.delenv("MIMIR_MAVEN", raising=False)
     monkeypatch.setenv("PATH", "")
